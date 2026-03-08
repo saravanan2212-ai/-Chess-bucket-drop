@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Chess Bucket Drop</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #08080f;
+      --gold: #f0c040;
+      --teal: #1abc9c;
+      --red: #e74c3c;
+      --pink: #ff9ff3;
+      --white: #f0ede8;
+      --hud-h: 64px;
+    }
+
+    @media (max-width: 540px)  { :root { --hud-h: 54px; } }
+    @media (max-width: 380px)  { :root { --hud-h: 48px; } }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Space Mono', monospace;
+      color: var(--white);
+      user-select: none;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── HUD ── */
+    #hud {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--hud-h);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      background: rgba(6,6,12,0.96);
+      border-bottom: 1px solid rgba(240,192,64,0.18);
+      z-index: 20;
+      backdrop-filter: blur(10px);
+    }
+
+    .hud-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .hud-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: #555;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .hud-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 2px;
+      color: var(--gold);
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    #comboDisplay  { color: #555; }
+    #levelDisplay  { color: var(--teal); }
+
+    .hud-value.flash {
+      animation: hud-flash 0.25s ease-out;
+    }
+    @keyframes hud-flash {
+      0%   { transform: scale(1.5); }
+      100% { transform: scale(1); }
+    }
+
+    @media (max-width: 540px) {
+      .hud-label  { font-size: 9px; letter-spacing: 2px; }
+      .hud-value  { font-size: 20px; }
+    }
+    @media (max-width: 380px) {
+      .hud-label  { font-size: 8px; letter-spacing: 1px; }
+      .hud-value  { font-size: 17px; }
+      #hud        { padding: 0 8px; gap: 2px; }
+    }
+    @media (max-width: 320px) {
+      .hud-value  { font-size: 15px; }
+    }
+
+    /* ── CANVAS ── */
+    #gameCanvas {
+      position: fixed;
+      top: var(--hud-h);
+      left: 0;
+      width: 100%;
+      height: calc(100% - var(--hud-h));
+      display: block;
+    }
+
+    /* ── OVERLAYS ── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5,5,10,0.94);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+    .overlay.hidden { display: none; }
+
+    .overlay-box {
+      text-align: center;
+      padding: 44px 40px;
+      background: rgba(12,12,22,0.98);
+      border: 1px solid rgba(240,192,64,0.28);
+      border-radius: 4px;
+      max-width: 400px;
+      width: 92%;
+      box-shadow:
+        0 0 0 1px rgba(240,192,64,0.07),
+        0 0 80px rgba(240,192,64,0.1),
+        0 30px 80px rgba(0,0,0,0.75);
+    }
+
+    @media (max-width: 480px) {
+      .overlay-box { padding: 30px 24px; }
+    }
+
+    .title-glyph {
+      font-size: 58px;
+      line-height: 1;
+      margin-bottom: 10px;
+      filter: drop-shadow(0 0 22px rgba(240,192,64,0.65));
+      animation: glyph-pulse 2.6s ease-in-out infinite;
+      display: block;
+    }
+    @keyframes glyph-pulse {
+      0%,100% { transform: scale(1) rotate(-2deg); }
+      50%      { transform: scale(1.1) rotate(2deg); }
+    }
+
+    .game-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 50px;
+      letter-spacing: 5px;
+      line-height: 1.05;
+      color: var(--white);
+    }
+    .game-title span { color: var(--gold); }
+
+    @media (max-width: 380px) {
+      .game-title  { font-size: 38px; letter-spacing: 3px; }
+      .title-glyph { font-size: 46px; }
+    }
+
+    .subtitle {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #777;
+      line-height: 1.85;
+      letter-spacing: 0.5px;
+    }
+
+    .piece-guide {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+    .piece-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: #555;
+    }
+    .piece-item .pi-g { font-size: 24px; line-height: 1; }
+
+    .hs-line {
+      margin-top: 12px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 13px;
+      letter-spacing: 3px;
+      color: #444;
+    }
+    .hs-line span { color: var(--gold); font-size: 20px; }
+
+    .new-best {
+      margin-top: 8px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      letter-spacing: 3px;
+      color: var(--teal);
+      display: none;
+    }
+
+    .btn-main {
+      margin-top: 28px;
+      padding: 15px 0;
+      width: 100%;
+      background: var(--gold);
+      color: #08080f;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 4px;
+      border: none;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.12s;
+      box-shadow: 0 4px 28px rgba(240,192,64,0.4);
+    }
+    .btn-main:hover  { transform: translateY(-2px); box-shadow: 0 8px 36px rgba(240,192,64,0.55); }
+    .btn-main:active { transform: translateY(1px); }
+
+    #finalScore { font-size: 17px; color: var(--gold); font-family: 'Bebas Neue', sans-serif; letter-spacing: 3px; margin-top: 16px; }
+
+    /* ── Game Over Video ── */
+    .gameover-video-wrap {
+      position: relative;
+      margin: 20px auto 0;
+      width: 100%;
+      max-width: 320px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid rgba(240,192,64,0.22);
+      box-shadow: 0 0 32px rgba(240,192,64,0.12), 0 8px 32px rgba(0,0,0,0.5);
+      background: #000;
+      aspect-ratio: 16 / 9;
+    }
+    /* fallback if video has no aspect ratio (portrait, etc) — remove aspect-ratio override */
+    .gameover-video-wrap.portrait { aspect-ratio: 9 / 16; max-width: 180px; }
+
+    #gameOverVideo {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 3px;
+    }
+
+    /* thin gold scan line on top for style */
+    .gameover-video-wrap::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        180deg,
+        transparent 0px,
+        transparent 3px,
+        rgba(0,0,0,0.06) 3px,
+        rgba(0,0,0,0.06) 4px
+      );
+      pointer-events: none;
+      border-radius: 3px;
+    }
+
+    @media (max-width: 400px) {
+      .gameover-video-wrap { max-width: 100%; }
+    }
+
+    #playerImg { display: none; }
+  </style>
+</head>
+<body>
+
+<img id="playerImg" src="Goofy.png" alt="" crossorigin="anonymous" />
+
+<!-- START SCREEN -->
+<div id="startScreen" class="overlay">
+  <div class="overlay-box">
+    <span class="title-glyph">♚</span>
+    <h1 class="game-title">CHESS<br><span>BUCKET DROP</span></h1>
+    <p class="subtitle">Catch the pieces. Build your combo.<br>Higher pieces = bigger points.</p>
+    <div class="piece-guide">
+      <div class="piece-item"><span class="pi-g" style="color:#c0c0c0">♟</span><span>×1</span></div>
+      <div class="piece-item"><span class="pi-g" style="color:#7ec8e3">♞</span><span>×3</span></div>
+      <div class="piece-item"><span class="pi-g" style="color:#b8e994">♝</span><span>×3</span></div>
+      <div class="piece-item"><span class="pi-g" style="color:#f8d36e">♜</span><span>×5</span></div>
+      <div class="piece-item"><span class="pi-g" style="color:#ff9ff3">♛</span><span>×9</span></div>
+      <div class="piece-item"><span class="pi-g" style="color:#ff6b6b">♚</span><span>×15</span></div>
+    </div>
+    <p class="hs-line">BEST &nbsp;<span id="startHs">0</span></p>
+    <button id="startBtn" class="btn-main">START GAME</button>
+  </div>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="gameOverScreen" class="overlay hidden">
+  <div class="overlay-box">
+    <span class="title-glyph">♟</span>
+    <h2 class="game-title">GAME<br><span>OVER</span></h2>
+    <p id="finalScore">SCORE: 0</p>
+    <p id="newBest" class="new-best">🏆 NEW BEST!</p>
+
+    <!-- ↓↓↓ REPLACE src="#" WITH YOUR VIDEO URL ↓↓↓ -->
+    <div class="gameover-video-wrap portrait" id="videoWrap">
+      <video
+        id="gameOverVideo"
+        src="dance.mp4"
+        unmuted
+        loop
+        playsinline
+        preload="auto"
+      ></video>
+    </div>
+    <!-- ↑↑↑ REPLACE src="#" WITH YOUR VIDEO URL ↑↑↑ -->
+
+    <p class="hs-line">BEST &nbsp;<span id="gameOverHs">0</span></p>
+    <button id="restartBtn" class="btn-main">PLAY AGAIN</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-item">
+    <span class="hud-label">SCORE</span>
+    <span id="scoreDisplay"  class="hud-value">0</span>
+  </div>
+  <div class="hud-item">
+    <span class="hud-label">COMBO</span>
+    <span id="comboDisplay"  class="hud-value">×1</span>
+  </div>
+  <div class="hud-item">
+    <span class="hud-label">LIVES</span>
+    <span id="livesDisplay"  class="hud-value">❤️❤️❤️</span>
+  </div>
+  <div class="hud-item">
+    <span class="hud-label">LEVEL</span>
+    <span id="levelDisplay"  class="hud-value">1</span>
+  </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════  PIECES  ══════════════════════════════════════ */
+const PIECES = [
+  { glyph:'♟', value:1,  weight:55, color:'#c8c8c8', glow:'rgba(200,200,200,0.55)' },
+  { glyph:'♞', value:3,  weight:20, color:'#7ec8e3', glow:'rgba(126,200,227,0.6)' },
+  { glyph:'♝', value:3,  weight:15, color:'#b8e994', glow:'rgba(184,233,148,0.6)' },
+  { glyph:'♜', value:5,  weight:9,  color:'#f8d36e', glow:'rgba(248,211,110,0.65)' },
+  { glyph:'♛', value:9,  weight:4,  color:'#ff9ff3', glow:'rgba(255,159,243,0.7)' },
+  { glyph:'♚', value:15, weight:2,  color:'#ff6b6b', glow:'rgba(255,107,107,0.75)' },
+];
+const TOTAL_W = PIECES.reduce((s,p) => s+p.weight, 0);
+function randomPiece() {
+  let r = Math.random() * TOTAL_W;
+  for (const p of PIECES) { r -= p.weight; if (r <= 0) return p; }
+  return PIECES[0];
+}
+
+/* ═══════════════════════════  REFS  ════════════════════════════════════════ */
+const playerImg  = document.getElementById('playerImg');
+const canvas     = document.getElementById('gameCanvas');
+const ctx        = canvas.getContext('2d');
+const scoreEl    = document.getElementById('scoreDisplay');
+const comboEl    = document.getElementById('comboDisplay');
+const livesEl    = document.getElementById('livesDisplay');
+const levelEl    = document.getElementById('levelDisplay');
+
+/* ═══════════════════════════  STATE  ═══════════════════════════════════════ */
+let score, lives, fallingPieces, gameActive, animId;
+let playerX;
+let spawnTimer = 0;
+let combo = 0, comboTimer = 0;
+let level = 1;
+let catchCount = 0; // for level progression
+let bgOffset = 0;
+let keysHeld  = {};
+let particles  = [];
+let floatTexts = [];
+let shakePow   = 0;
+let flashAlpha = 0, flashColor = '#fff';
+let highScore  = parseInt(localStorage.getItem('chess_bucket_hs') || '0');
+let lastFrameTime = 0; // for delta-time normalisation
+let dtScale = 1;       // updated every frame, used by drawParticles / drawFloats
+
+/* ═══════════════════════════  SPRITE  ══════════════════════════════════════ */
+// Max display envelope — sprite fills this while preserving its own aspect ratio
+const SPRITE_MAX_H = 220;
+const SPRITE_MAX_W = 200;
+let spriteW = 0, spriteH = 0;
+
+function computeSpriteSize() {
+  if (playerImg.naturalWidth > 0) {
+    const aspect = playerImg.naturalWidth / playerImg.naturalHeight;
+    // Scale canvas height dependent max
+    const maxH = Math.min(SPRITE_MAX_H, canvas.height * 0.32);
+    let h = maxH;
+    let w = h * aspect;
+    if (w > SPRITE_MAX_W) { w = SPRITE_MAX_W; h = w / aspect; }
+    spriteW = w;
+    spriteH = h;
+  } else {
+    // Fallback bucket
+    spriteW = 88;
+    spriteH = 78;
+  }
+}
+playerImg.addEventListener('load', computeSpriteSize);
+
+/* ── Catch zone ── centered on playerX, no left/right offset ── */
+// Width scales slightly with screen, clamped to reasonable range
+function getCatchHalfW() {
+  return Math.min(72, Math.max(52, canvas.width * 0.09));
+}
+const CATCH_H = 38;
+
+function getCatchZone() {
+  const hw   = getCatchHalfW();
+  const sh   = spriteH || 78;
+  // Opening of bucket sits at ~50% down the sprite
+  const cy   = canvas.height - sh - 4 + sh * 0.50;
+  return { left: playerX - hw, right: playerX + hw, top: cy, bottom: cy + CATCH_H };
+}
+
+/* ── Player X clamp — ensures catch zone never leaves screen ── */
+function clampPlayerX(x) {
+  const hw = getCatchHalfW();
+  return Math.max(hw + 8, Math.min(canvas.width - hw - 8, x));
+}
+
+/* ═══════════════════════════  AUDIO  ═══════════════════════════════════════ */
+let audioCtx;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function tone(freq, type, dur, vol=0.25, delay=0) {
+  try {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    const t = audioCtx.currentTime + delay;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  } catch(_) {}
+}
+function playCatch(value) {
+  const f = 380 + value * 28;
+  tone(f,      'sine',     0.12, 0.28);
+  tone(f*1.5,  'sine',     0.10, 0.16, 0.07);
+  if (value >= 5) tone(f*2, 'sine', 0.10, 0.10, 0.14);
+}
+function playMiss() {
+  tone(110, 'sawtooth', 0.28, 0.22);
+  tone(80,  'sawtooth', 0.22, 0.15, 0.12);
+}
+function playLevelUp() {
+  [440,550,660,880].forEach((f,i) => tone(f,'triangle',0.14,0.18,i*0.09));
+}
+function playComboUp(mult) {
+  const f = 600 + mult * 80;
+  tone(f,     'sine', 0.09, 0.18);
+  tone(f*1.2, 'sine', 0.08, 0.14, 0.09);
+}
+
+/* ═══════════════════════════  RESIZE  ══════════════════════════════════════ */
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight - document.getElementById('hud').offsetHeight;
+  computeSpriteSize();
+  if (!gameActive) playerX = canvas.width / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ═══════════════════════════  SPAWN  ═══════════════════════════════════════ */
+function spawnPiece() {
+  const piece = randomPiece();
+  const size  = 40 + Math.random() * 20;
+  const hw    = getCatchHalfW();
+  // Keep pieces within the range the player can actually catch
+  const margin = Math.max(size, hw + 12);
+  const x      = margin + Math.random() * (canvas.width - margin * 2);
+  const speedBase = 1.8 + Math.random() * 1.2;
+  const speedMult = 1 + (level - 1) * 0.12;
+  return {
+    x, y: -size, size,
+    speed: speedBase * speedMult,
+    piece,
+    opacity:   1,
+    caught:    false,
+    catchAnim: 0,
+    rotSpd: (Math.random() - 0.5) * 0.05,
+    rot: 0,
+  };
+}
+
+/* ═══════════════════════════  PARTICLES  ═══════════════════════════════════ */
+function burst(x, y, color, n=14) {
+  for (let i=0; i<n; i++) {
+    const a   = (Math.PI * 2 * i / n) + (Math.random()-0.5) * 0.9;
+    const spd = 2.2 + Math.random() * 5.5;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.8,
+      life: 1,
+      decay: 0.035 + Math.random() * 0.03,
+      r: 2.5 + Math.random() * 3.5,
+      color,
+    });
+  }
+}
+
+function drawParticles() {
+  for (let i=particles.length-1; i>=0; i--) {
+    const p = particles[i];
+    p.x  += p.vx * dtScale;
+    p.y  += p.vy * dtScale;
+    p.vy += 0.18 * dtScale;
+    p.life -= p.decay * dtScale;
+    if (p.life <= 0) { particles.splice(i,1); continue; }
+    ctx.save();
+    ctx.globalAlpha   = p.life * p.life;
+    ctx.fillStyle     = p.color;
+    ctx.shadowColor   = p.color;
+    ctx.shadowBlur    = 8;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ═══════════════════════════  FLOAT TEXTS  ═════════════════════════════════ */
+function addFloat(text, x, y, color='#f0c040', sz=26) {
+  floatTexts.push({ text, x, y, life:48, max:48, color, sz });
+}
+
+function drawFloats() {
+  for (const f of floatTexts) {
+    const t = f.life / f.max;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, t * 2.2);
+    ctx.font        = `bold ${f.sz}px "Bebas Neue", serif`;
+    ctx.fillStyle   = f.color;
+    ctx.textAlign   = 'center';
+    ctx.shadowColor = f.color;
+    ctx.shadowBlur  = 10;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.restore();
+    f.y   -= 1.5 * dtScale;
+    f.life -= dtScale;
+  }
+  floatTexts = floatTexts.filter(f => f.life > 0);
+}/* ═══════════════════════════  DRAW PIECE  ══════════════════════════════════ */
+function drawPiece(p) {
+  ctx.save();
+  const s = p.size;
+
+  // Catch pop animation
+  if (p.catchAnim > 0) {
+    const t = p.catchAnim / 18;
+    ctx.globalAlpha = t * t;
+    ctx.translate(p.x, p.y);
+    ctx.scale(1 + (1-t)*0.7, 1 + (1-t)*0.7);
+    ctx.translate(-p.x, -p.y);
+  }
+
+  ctx.shadowColor = p.piece.glow;
+  ctx.shadowBlur  = 22;
+
+  // Circle bg
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, s * 0.62, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(12,12,24,0.88)';
+  ctx.fill();
+
+  // Ring
+  ctx.strokeStyle = p.piece.color;
+  ctx.lineWidth   = 1.8;
+  ctx.globalAlpha = (ctx.globalAlpha || 1) * 0.65;
+  ctx.stroke();
+  ctx.globalAlpha = (ctx.globalAlpha || 1) / 0.65;
+
+  // Glyph
+  ctx.shadowBlur      = 10;
+  ctx.font            = `bold ${(s*0.88).toFixed(0)}px serif`;
+  ctx.textAlign       = 'center';
+  ctx.textBaseline    = 'middle';
+  ctx.fillStyle       = p.piece.color;
+  ctx.fillText(p.piece.glyph, p.x, p.y+1);
+
+  ctx.restore();
+}
+
+/* ═══════════════════════════  DRAW PLAYER  ═════════════════════════════════ */
+function drawPlayer() {
+  const sh  = spriteH || 78;
+  const sw  = spriteW || 88;
+  const px  = playerX - sw / 2;
+  const py  = canvas.height - sh - 4;
+
+  if (playerImg.complete && playerImg.naturalWidth > 0) {
+    ctx.drawImage(playerImg, px, py, sw, sh);
+  } else {
+    // ── Fallback drawn bucket ──
+    const bx = playerX - 44, by = canvas.height - 76, bw = 88, bh = 58;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(bx+10, by); ctx.lineTo(bx+bw-10, by);
+    ctx.lineTo(bx+bw, by+bh); ctx.lineTo(bx, by+bh);
+    ctx.closePath();
+    ctx.fillStyle = '#c0392b'; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(bx-4, by); ctx.lineTo(bx+bw+4, by);
+    ctx.lineWidth = 6; ctx.strokeStyle = '#e74c3c'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(playerX, by-10, 26, Math.PI, 0);
+    ctx.lineWidth = 4; ctx.strokeStyle = '#888'; ctx.stroke();
+    ctx.restore();
+  }
+
+  // Subtle catch-zone glow line
+  const cz = getCatchZone();
+  const grd = ctx.createLinearGradient(cz.left, 0, cz.right, 0);
+  const gAlpha = combo > 1 ? 0.55 : 0.22;
+  const glowCol = combo > 1 ? 'rgba(255,159,243,' : 'rgba(240,192,64,';
+  grd.addColorStop(0,   glowCol+'0)');
+  grd.addColorStop(0.5, glowCol+gAlpha+')');
+  grd.addColorStop(1,   glowCol+'0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(cz.left, cz.top - 1, cz.right - cz.left, 3);
+}
+
+/* ═══════════════════════════  BACKGROUND  ══════════════════════════════════ */
+function drawBackground() {
+  const ts = 58;
+  bgOffset = (bgOffset + 0.18 * dtScale) % ts;
+
+  const cols = Math.ceil(canvas.width / ts) + 1;
+  const rows = Math.ceil(canvas.height / ts) + 1;
+
+  for (let r=0; r<rows; r++) {
+    for (let c=0; c<cols; c++) {
+      ctx.fillStyle = (r+c)%2 === 0 ? '#09091400' : '#0e0e1a';
+      ctx.fillStyle = (r+c)%2 === 0 ? '#09090f' : '#0d0d1b';
+      ctx.fillRect(c*ts - bgOffset, r*ts - bgOffset, ts, ts);
+    }
+  }
+
+  // Vignette
+  const vg = ctx.createRadialGradient(
+    canvas.width/2, canvas.height/2, canvas.height * 0.12,
+    canvas.width/2, canvas.height/2, canvas.height * 0.9
+  );
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.75)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Faint scanlines
+  ctx.save();
+  ctx.globalAlpha = 0.025;
+  ctx.fillStyle   = '#000';
+  for (let y=0; y<canvas.height; y+=4) ctx.fillRect(0, y, canvas.width, 2);
+  ctx.restore();
+
+  // Screen flash (level up / catch feedback)
+  if (flashAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = flashAlpha;
+    ctx.fillStyle   = flashColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    flashAlpha = Math.max(0, flashAlpha - 0.028 * dtScale);
+  }
+}
+
+/* ═══════════════════════════  HUD UPDATE  ══════════════════════════════════ */
+function getMultiplier() {
+  if (combo >= 12) return 8;
+  if (combo >= 8)  return 6;
+  if (combo >= 5)  return 4;
+  if (combo >= 3)  return 3;
+  if (combo >= 2)  return 2;
+  return 1;
+}
+
+let prevMult = 1;
+function updateHUD() {
+  scoreEl.textContent = score;
+  livesEl.textContent = ['❤️','❤️','❤️'].map((_,i) => i<lives ? '❤️' : '🖤').join('');
+  levelEl.textContent = level;
+
+  const mult = getMultiplier();
+  comboEl.textContent = `×${mult}`;
+  if (mult > 1) {
+    comboEl.style.color = '#ff9ff3';
+    if (mult > prevMult) {
+      comboEl.classList.remove('flash');
+      void comboEl.offsetWidth;
+      comboEl.classList.add('flash');
+      playComboUp(mult);
+    }
+  } else {
+    comboEl.style.color = '#444';
+  }
+  prevMult = mult;
+}
+
+/* ═══════════════════════════  LEVEL CHECK  ═════════════════════════════════ */
+function checkLevel() {
+  // Level up every 10 catches
+  const newLevel = 1 + Math.floor(catchCount / 10);
+  if (newLevel > level) {
+    level = newLevel;
+    playLevelUp();
+    flashAlpha = 0.18;
+    flashColor = 'rgba(26,188,156,0.5)';
+    addFloat(`LEVEL ${level}!`, canvas.width/2, canvas.height/2 - 50, '#1abc9c', 46);
+    updateHUD();
+  }
+}
+
+/* ═══════════════════════════  GAME LOOP  ═══════════════════════════════════ */
+function gameLoop(timestamp) {
+  if (!gameActive) return;
+
+  // ── Delta-time: normalise all movement to 60fps regardless of monitor Hz ──
+  // On a 144Hz screen rAF fires ~2.4× more often — without this, everything
+  // moves 2.4× faster when Chrome boosts priority (e.g. during mouse movement).
+  const dt    = lastFrameTime ? Math.min(timestamp - lastFrameTime, 50) : 16.667;
+  lastFrameTime = timestamp;
+  const s     = dt / 16.667; // scale factor: 1.0 at 60fps, 0.5 at 120fps, etc.
+  dtScale = s;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Screen shake
+  ctx.save();
+  if (shakePow > 0) {
+    ctx.translate(
+      (Math.random()-0.5) * shakePow * 2.2,
+      (Math.random()-0.5) * shakePow * 2.2
+    );
+    shakePow = Math.max(0, shakePow - 1.4 * s);
+  }
+
+  drawBackground();
+
+  // Dynamic spawn rate
+  const spawnInterval = Math.max(22, 85 - (level - 1) * 9);
+  spawnTimer += s;
+  if (spawnTimer >= spawnInterval) {
+    fallingPieces.push(spawnPiece());
+    spawnTimer = 0;
+  }
+
+  // Combo timer
+  comboTimer = Math.max(0, comboTimer - s);
+  if (comboTimer === 0 && combo > 0) {
+    combo = 0;
+    updateHUD();
+  }
+
+  // Smooth keyboard movement
+  const step = Math.min(14, 8 + level * 0.4) * s;
+  if (keysHeld['ArrowLeft'])  playerX = clampPlayerX(playerX - step);
+  if (keysHeld['ArrowRight']) playerX = clampPlayerX(playerX + step);
+
+  const cz = getCatchZone();
+
+  for (let i=fallingPieces.length-1; i>=0; i--) {
+    const p = fallingPieces[i];
+
+    // Catch pop anim
+    if (p.catchAnim > 0) {
+      p.catchAnim -= s;
+      drawPiece(p);
+      if (p.catchAnim <= 0) fallingPieces.splice(i,1);
+      continue;
+    }
+
+    p.y += p.speed * s;
+
+    // ── CATCH CHECK — centered on playerX, no side offset ──
+    if (!p.caught &&
+        p.y + p.size * 0.5 >= cz.top &&
+        p.y - p.size * 0.5 <= cz.bottom &&
+        p.x >= cz.left &&
+        p.x <= cz.right) {
+
+      p.caught    = true;
+      p.catchAnim = 18;
+      catchCount++;
+      combo++;
+      comboTimer = 95; // ~1.6s window
+
+      const mult   = getMultiplier();
+      const earned = p.piece.value * mult;
+      score += earned;
+
+      updateHUD();
+      checkLevel();
+      playCatch(p.piece.value);
+      burst(p.x, p.y, p.piece.color, 14 + mult * 2);
+
+      const label = mult > 1 ? `+${earned}  ×${mult}` : `+${earned}`;
+      addFloat(label, p.x, p.y - 26, p.piece.color, 28);
+      continue;
+    }
+
+    // ── MISS ──
+    if (p.y - p.size > canvas.height) {
+      lives--;
+      combo = 0;
+      comboTimer = 0;
+      updateHUD();
+      playMiss();
+      shakePow = 9;
+      flashAlpha = 0.14;
+      flashColor = 'rgba(231,76,60,0.55)';
+      burst(p.x, canvas.height - 40, '#e74c3c', 10);
+      addFloat('MISS!', p.x, canvas.height - 110, '#e74c3c', 32);
+      fallingPieces.splice(i,1);
+      if (lives <= 0) { ctx.restore(); endGame(); return; }
+      continue;
+    }
+
+    drawPiece(p);
+  }
+
+  drawPlayer();
+  drawParticles();
+  drawFloats();
+
+  ctx.restore();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+/* ═══════════════════════════  GAME CONTROL  ════════════════════════════════ */
+const gameOverVideo = document.getElementById('gameOverVideo');
+
+function startGame() {
+  // Stop & reset video
+  gameOverVideo.pause();
+  gameOverVideo.currentTime = 0;
+
+  score = 0; lives = 3; level = 1; catchCount = 0;
+  combo = 0; comboTimer = 0; prevMult = 1;
+  fallingPieces = []; particles = []; floatTexts = [];
+  spawnTimer = 0; bgOffset = 0; shakePow = 0; flashAlpha = 0;
+  playerX = canvas.width / 2;
+  lastFrameTime = 0;
+  dtScale = 1;
+  gameActive = true;
+  updateHUD();
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  ensureAudio();
+  if (animId) cancelAnimationFrame(animId);
+  gameLoop();
+}
+
+function endGame() {
+  gameActive = false;
+  cancelAnimationFrame(animId);
+
+  const isNew = score > highScore;
+  if (isNew) { highScore = score; localStorage.setItem('chess_bucket_hs', highScore); }
+
+  document.getElementById('finalScore').textContent = `SCORE: ${score}  ·  LEVEL: ${level}`;
+  document.getElementById('newBest').style.display  = isNew ? 'block' : 'none';
+  document.getElementById('gameOverHs').textContent  = highScore;
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+
+  // Play the game over video (only if a real src has been set)
+  if (gameOverVideo.src && !gameOverVideo.src.endsWith('#')) {
+    gameOverVideo.currentTime = 0;
+    const doPlay = () => gameOverVideo.play().catch(() => {});
+    // readyState >= 3 means enough data is buffered to play immediately
+    if (gameOverVideo.readyState >= 3) {
+      doPlay();
+    } else {
+      gameOverVideo.addEventListener('canplay', doPlay, { once: true });
+    }
+  }
+}
+
+function refreshStartHs() {
+  document.getElementById('startHs').textContent = highScore;
+}
+
+/* ═══════════════════════════  CONTROLS  ════════════════════════════════════ */
+// Mouse
+window.addEventListener('mousemove', e => {
+  if (!gameActive) return;
+  const rect = canvas.getBoundingClientRect();
+  playerX = clampPlayerX(e.clientX - rect.left);
+});
+
+// Touch — move directly to touch position
+window.addEventListener('touchstart', e => {
+  if (!gameActive) return;
+  const rect = canvas.getBoundingClientRect();
+  playerX = clampPlayerX(e.touches[0].clientX - rect.left);
+}, { passive: true });
+
+window.addEventListener('touchmove', e => {
+  if (!gameActive) return;
+  const rect = canvas.getBoundingClientRect();
+  playerX = clampPlayerX(e.touches[0].clientX - rect.left);
+  e.preventDefault();
+}, { passive: false });
+
+// Keyboard — held keys handled in loop for smooth movement
+window.addEventListener('keydown', e => {
+  keysHeld[e.key] = true;
+  if ((e.key === ' ' || e.key === 'Enter') && !gameActive) startGame();
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.preventDefault();
+});
+window.addEventListener('keyup', e => { keysHeld[e.key] = false; });
+
+document.getElementById('startBtn').addEventListener('click',   startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+refreshStartHs();
+</script>
+</body>
+</html>
